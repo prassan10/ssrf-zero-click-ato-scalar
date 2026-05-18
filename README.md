@@ -150,8 +150,8 @@ headers compound the issue by weakening CORS protections on the proxy response.
 | Date | Event |
 |---|---|
 | 2026-03-27 | CVE-2026-30118 assigned by MITRE |
-| TBD | Vendor notification |
-| TBD | Patch / disclosure |
+| 2025-10-25 | Vendor notified (support@scalar.com) — no response received |
+| 2026-05-18 | Public disclosure (90-day window expired 2026-01-23) |
 
 ---
 
